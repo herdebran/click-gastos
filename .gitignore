@@ -1,0 +1,20 @@
+# IDEs
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vendor (si usás composer en el futuro)
+vendor/
+
+# Logs
+*.log
+
+# Config sensible
+/config/database.php
+
+# Archivos temporales
+*.tmp
+*.bak

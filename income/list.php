@@ -1,0 +1,191 @@
+<?php
+require_once '../config/database.php';
+require_once '../includes/auth.php';
+
+$pdo = getDatabaseConnection();
+$page_title = "Ingresos";
+$company_id = $_SESSION['company_id'];
+
+$stmt = $pdo->prepare("
+    SELECT 
+        i.id, i.date, i.amount, i.note,
+        p.name AS product_name,
+        c.name AS category_name,
+        a.name AS account_name,
+        curr.symbol
+    FROM incomes i
+    INNER JOIN products p ON i.product_id = p.id
+    INNER JOIN categories c ON p.category_id = c.id
+    INNER JOIN accounts a ON i.account_id = a.id
+    INNER JOIN currencies curr ON i.currency_id = curr.id
+    WHERE i.company_id = ?
+    ORDER BY i.date DESC, i.created_at DESC
+");
+$stmt->execute([$company_id]);
+$incomes = $stmt->fetchAll();
+
+// Contar total de ingresos y total ingresado
+$total_count = count($incomes);
+$total_amount = array_sum(array_column($incomes, 'amount'));
+
+include '../includes/header.php';
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Mis Ingresos – GastosApp</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Poppins', sans-serif; }
+        .btn-blue { background-color: #3b82f6; }
+        .btn-blue:hover { background-color: #2563eb; }
+        .badge-blue { background-color: #dbeafe; color: #1e40af; }
+        .badge-green { background-color: #dcfce7; color: #166534; }
+        .badge-purple { background-color: #ede9fe; color: #4c1d95; }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<main x-data="expensesList" class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Mis Ingresos</h1>
+            <p class="text-sm text-gray-600 mt-1">
+                <?php echo number_format($total_count, 0, ',', '.'); ?> ingresos registrados • Total: $<?php echo number_format($total_amount, 2, ',', '.'); ?>
+            </p>
+        </div>
+        <a href="add.php" class="btn-blue text-white px-4 py-2 rounded-md text-sm font-medium mt-4 md:mt-0">
+            + Agregar Ingreso
+        </a>
+    </div>
+
+    <!-- Tabla de ingresos -->
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <?php if (empty($incomes)): ?>
+            <div class="text-center py-12 text-gray-500">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                <p class="mt-2">No tienes ingresos registrados.</p>
+                <p class="mt-1">¡Empieza a agregar tus primeros ingresos!</p>
+            </div>
+        <?php else: ?>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cuenta</th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Importe</th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                    <?php foreach ($incomes as $e): ?>
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo htmlspecialchars($e['date']); ?></td>
+                            <td class="px-6 py-4 text-sm font-medium text-gray-900"><?php echo htmlspecialchars($e['product_name']); ?></td>
+                            <td class="px-6 py-4 text-sm text-gray-500">
+                                <span class="badge-blue px-2 py-1 rounded text-xs"><?php echo htmlspecialchars($e['category_name']); ?></span>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-500">
+                                <span class="badge-purple px-2 py-1 rounded text-xs"><?php echo htmlspecialchars($e['account_name']); ?></span>
+                            </td>
+                            <td class="px-6 py-4 text-sm font-medium text-right text-gray-900"><?php echo htmlspecialchars($e['symbol']); ?><?php echo number_format($e['amount'], 2, ',', '.'); ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button type="button"
+                                        @click="openDeleteModal(<?php echo (int)$e['id']; ?>, '<?php echo htmlspecialchars($e['account_name']); ?>', <?php echo $e['amount']; ?>)"
+                                        class="text-red-600 hover:text-red-900">
+                                    Eliminar
+                                </button>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Botón flotante -->
+    <div class="fixed bottom-6 right-6">
+        <a href="add.php" class="inline-flex items-center justify-center h-14 w-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition">
+            <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+        </a>
+    </div>
+    <!-- Modal de confirmación de eliminación -->
+    <div x-show="deleteModalOpen" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="deleteModalOpen" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div x-show="deleteModalOpen" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                <div class="sm:flex sm:items-start">
+                    <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                        <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900">Eliminar Ingreso</h3>
+                        <div class="mt-2">
+                            <p class="text-sm text-gray-500">
+                                ¿Estás seguro de eliminar el ingreso de <strong>$<span x-text="deleteAmount"></span></strong> en <strong x-text="deleteAccountName"></strong>?
+                            </p>
+                            <div class="mt-4 flex items-center">
+                                <input type="checkbox" id="restoreBalance" x-model="restoreBalance" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                                <label for="restoreBalance" class="ml-2 block text-sm text-gray-700">
+                                    Devolver el importe a la cuenta
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                    <form :action="'delete.php?id=' + deleteExpenseId + '&restore=' + (restoreBalance ? '1' : '0')" method="POST" class="inline">
+                        <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 sm:ml-3 sm:w-auto sm:text-sm">
+                            Eliminar
+                        </button>
+                    </form>
+                    <button type="button" @click="deleteModalOpen = false" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('expensesList', () => ({
+                deleteModalOpen: false,
+                deleteExpenseId: null,
+                deleteAccountName: '',
+                deleteAmount: 0,
+                restoreBalance: true,
+
+                openDeleteModal(id, accountName, amount) {
+                    this.deleteExpenseId = id;
+                    this.deleteAccountName = accountName;
+                    this.deleteAmount = parseFloat(amount).toFixed(2);
+                    this.restoreBalance = true; // por defecto marcado
+                    this.deleteModalOpen = true;
+                }
+            }));
+        });
+    </script>
+
+</main>
+
+<?php include '../includes/footer.php';?>
