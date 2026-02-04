@@ -16,6 +16,7 @@ $stmt = $pdo->prepare("
     SELECT COALESCE(SUM(amount), 0) 
     FROM incomes 
     WHERE company_id = ? AND MONTH(date) = ? AND YEAR(date) = ?
+    AND is_transfer=0
 ");
 $stmt->execute([$company_id, $month, $year]);
 $income_month = (float)$stmt->fetchColumn();
@@ -25,6 +26,7 @@ $stmt = $pdo->prepare("
     SELECT COALESCE(SUM(amount), 0) 
     FROM expenses 
     WHERE company_id = ? AND MONTH(date) = ? AND YEAR(date) = ?
+    AND is_transfer=0
 ");
 $stmt->execute([$company_id, $month, $year]);
 $expense_month = (float)$stmt->fetchColumn();
@@ -44,6 +46,8 @@ $stmt = $pdo->prepare("
         e.company_id = ? 
         AND MONTH(e.date) = ? 
         AND YEAR(e.date) = ?
+        AND c.type = 'expense'
+        AND e.is_transfer = 0    
     GROUP BY c.id, c.name
     ORDER BY total DESC
     LIMIT 5
@@ -67,6 +71,30 @@ $meses_es = [
 $mes_actual = date('m');
 $nombre_mes = $meses_es[$mes_actual];
 $anio_actual = date('Y');
+
+// 5. Detalle de gastos por categoría (para drill-down)
+$expenses_by_category = [];
+foreach ($top_categories as $cat) {
+    $stmt = $pdo->prepare("
+        SELECT 
+            p.name as description,
+            e.amount
+        FROM expenses e
+        INNER JOIN products p ON e.product_id = p.id
+        INNER JOIN categories c ON p.category_id = c.id
+        WHERE 
+            e.company_id = ? 
+            AND MONTH(e.date) = ? 
+            AND YEAR(e.date) = ?
+            AND c.name = ?
+        ORDER BY e.amount DESC
+    ");
+    $stmt->execute([$company_id, $month, $year, $cat['category_name']]);
+    $expenses_by_category[$cat['category_name']] = array_map(function($item) {
+        $item['amount'] = (float)$item['amount'];
+        return $item;
+    }, $stmt->fetchAll());
+}
 
 include 'includes/header.php';
 ?>
@@ -150,52 +178,121 @@ include 'includes/header.php';
         </div>
     </div>
 
-    <!-- Gráfico de distribución de gastos por categoría -->
-    <div class="bg-white rounded-xl shadow-sm p-6 mb-8">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Distribución de gastos</h2>
-        <?php if (empty($top_categories)): ?>
-            <div class="text-center py-8 text-gray-500">
-                <p>No hay gastos registrados este mes.</p>
+    <!-- Contenedores de gráficos -->
+    <div class="grid grid-cols-1 md:grid-cols-1 gap-6 mb-8">
+        <!-- Gráfico principal: torta -->
+        <div id="chart-pie-container" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Distribución de gastos</h2>
+            <?php if (empty($top_categories)): ?>
+                <div class="text-center py-8 text-gray-500">
+                    <p>No hay gastos registrados este mes.</p>
+                </div>
+            <?php else: ?>
+                <div class="h-80">
+                    <canvas id="categoriesChart"></canvas>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- Gráfico drill-down: barras (oculto al inicio) -->
+        <div id="chart-bar-container" class="bg-white rounded-xl shadow-sm p-6 hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-semibold text-gray-900">Gastos en <span id="selected-category-name" class="text-blue-600"></span></h2>
+                <button onclick="showPieChart()" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                    ← Volver
+                </button>
             </div>
-        <?php else: ?>
-            <div class="h-64">
-                <canvas id="categoriesChart"></canvas>
+            <div class="h-80">
+                <canvas id="expensesBarChart"></canvas>
             </div>
-        <?php endif; ?>
+        </div>
     </div>
 
     <script>
+        let barChartInstance = null;
+
+        function showBarChart(categoryName) {
+            // Mostrar contenedor de barras y ocultar torta
+            document.getElementById('chart-pie-container').classList.add('hidden');
+            document.getElementById('chart-bar-container').classList.remove('hidden');
+            document.getElementById('selected-category-name').textContent = categoryName;
+
+            // Obtener datos
+            const expensesData = <?php echo json_encode($expenses_by_category); ?>;
+            const categoryExpenses = expensesData[categoryName] || [];
+
+            const labels = categoryExpenses.map(item => item.description || 'Sin descripción');
+            const amounts = categoryExpenses.map(item => item.amount);
+
+            const ctx = document.getElementById('expensesBarChart').getContext('2d');
+
+            // Destruir instancia anterior si existe
+            if (barChartInstance) barChartInstance.destroy();
+
+            barChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Monto ($)',
+                        data: amounts,
+                        backgroundColor: '#3b82f6',
+                        borderColor: '#2563eb',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y', // Barras horizontales
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Monto ($)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `$${context.parsed.x.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function showPieChart() {
+            document.getElementById('chart-pie-container').classList.remove('hidden');
+            document.getElementById('chart-bar-container').classList.add('hidden');
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             <?php if (!empty($top_categories)): ?>
             const ctx = document.getElementById('categoriesChart').getContext('2d');
 
-            // Datos desde PHP
             const categories = <?php echo json_encode(array_column($top_categories, 'category_name')); ?>;
             const amounts = <?php echo json_encode(array_column($top_categories, 'total')); ?>;
-
-            // Calcular total
             const total = amounts.reduce((a, b) => a + b, 0);
 
-            // Generar etiquetas con porcentaje (solo si total > 0)
             const labelsWithPercent = categories.map((name, i) => {
                 if (total > 0 && amounts[i] >= 0) {
                     const percent = Math.round((amounts[i] / total) * 100);
                     return `${name} (${percent}%)`;
                 } else {
-                    return name; // sin porcentaje si no aplica
+                    return name;
                 }
             });
 
-            // Colores dinámicos
-            const colors = [
-                '#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444',
-                '#ec4899', '#06b6d4', '#f97316'
-            ];
+            const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#f97316'];
 
             new Chart(ctx, {
                 type: 'pie',
                 data: {
-                    labels: labelsWithPercent, // ← ¡etiquetas con porcentaje!
+                    labels: labelsWithPercent,
                     datasets: [{
                         data: amounts,
                         backgroundColor: colors.slice(0, categories.length),
@@ -222,13 +319,19 @@ include 'includes/header.php';
                                 }
                             }
                         }
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const categoryName = categories[index];
+                            showBarChart(categoryName);
+                        }
                     }
                 }
             });
             <?php endif; ?>
         });
     </script>
-
 <!-- Cuentas con saldos -->
 <?php
     // Obtener cuentas con saldos
