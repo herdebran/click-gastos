@@ -77,8 +77,8 @@ $expenses_by_category = [];
 foreach ($top_categories as $cat) {
     $stmt = $pdo->prepare("
         SELECT 
-            p.name as description,
-            e.amount
+            p.name AS description,
+            SUM(e.amount) AS amount
         FROM expenses e
         INNER JOIN products p ON e.product_id = p.id
         INNER JOIN categories c ON p.category_id = c.id
@@ -87,7 +87,10 @@ foreach ($top_categories as $cat) {
             AND MONTH(e.date) = ? 
             AND YEAR(e.date) = ?
             AND c.name = ?
-        ORDER BY e.amount DESC
+            AND c.type = 'expense'
+            AND e.is_transfer = 0
+        GROUP BY p.id, p.name
+        ORDER BY amount DESC        
     ");
     $stmt->execute([$company_id, $month, $year, $cat['category_name']]);
     $expenses_by_category[$cat['category_name']] = array_map(function($item) {
