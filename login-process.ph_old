@@ -10,14 +10,9 @@ if (isset($_SESSION['user_id'])) {
     exit();
 }
 
-// Función para detectar dispositivo móvil
-function isMobile() {
-    return preg_match("/(android|avantgo|blackberry|bolt|boost|cricket|docomo|fone|hiptop|mini|mobi|palm|phone|pie|tablet|up\.browser|up\.link|webos|wos)/i", $_SERVER["HTTP_USER_AGENT"]);
-}
-
 // Cargar la conexión a la base de datos
 require_once 'config/database.php';
-$pdo = getDatabaseConnection();
+$pdo = getDatabaseConnection(); // ← ¡esta línea es clave!
 
 $error = '';
 
@@ -40,15 +35,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['company_id'] = (int)$user['company_id'];
                 $_SESSION['username'] = $user['username'];
 
-                // Establecer cookie de persistencia
-                if (isMobile()) {
-                    // En móviles: 30 días
-                    setcookie('remember_user', $user['id'], time() + (30 * 24 * 60 * 60), '/', '', false, true);
-                } else {
-                    // En desktop: 1 hora (más seguro)
-                    setcookie('remember_user', $user['id'], time() + (60 * 60), '/', '', false, true);
-                }
-
                 // Redirigir a la página original o al dashboard
                 $redirect = $_SESSION['redirect_after_login'] ?? 'dashboard.php';
                 unset($_SESSION['redirect_after_login']);
@@ -69,4 +55,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $_SESSION['login_error'] = $error;
 header('Location: login.php');
 exit();
-?>

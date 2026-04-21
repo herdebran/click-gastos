@@ -12,11 +12,6 @@ $page_title = "Nuevo Gasto";
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title><?php echo $page_title; ?> – GastosApp</title>
 
-    <!-- 🔑 IMPORTANTE: Enlazar el manifest -->
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#3b82f6">
-    <link rel="apple-touch-icon" href="/icon-192.png">
-
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; }

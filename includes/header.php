@@ -9,7 +9,11 @@ unset($_SESSION['success'], $_SESSION['error']);
 <html lang="es">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <!-- Las siguientes 3 lineas hacen powerapp para mobile -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $page_title ?? 'GastosApp'; ?> – GastosApp</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -93,3 +97,11 @@ unset($_SESSION['success'], $_SESSION['error']);
 </nav>
 
 <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js');
+        });
+    }
+</script>

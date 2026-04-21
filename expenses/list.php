@@ -6,7 +6,38 @@ $pdo = getDatabaseConnection();
 $page_title = "Gastos";
 $company_id = $_SESSION['company_id'];
 
-// Obtener gastos con JOINs para producto, categoría y cuenta
+// Fechas por defecto: desde el 1ro del mes hasta hoy
+$fecha_hasta_default = date('Y-m-d');
+$fecha_desde_default = date('Y-m-01');
+
+// Obtener fechas del formulario (si existen)
+$fecha_desde = $_GET['fecha_desde'] ?? $fecha_desde_default;
+$fecha_hasta = $_GET['fecha_hasta'] ?? $fecha_hasta_default;
+
+// Validar formato
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_desde)) $fecha_desde = $fecha_desde_default;
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_hasta)) $fecha_hasta = $fecha_hasta_default;
+
+// Asegurar que fecha_hasta no sea mayor a hoy
+if ($fecha_hasta > date('Y-m-d')) {
+    $fecha_hasta = date('Y-m-d');
+}
+
+// Asegurar que fecha_desde no sea mayor a fecha_hasta
+if ($fecha_desde > $fecha_hasta) {
+    $fecha_desde = $fecha_hasta;
+}
+
+// Construir condiciones
+$where = "e.company_id = :company_id AND e.is_transfer = 0";
+$params = ['company_id' => $company_id];
+
+// Siempre aplicar el rango de fechas (incluso por defecto)
+$where .= " AND e.date >= :fecha_desde AND e.date <= :fecha_hasta";
+$params['fecha_desde'] = $fecha_desde;
+$params['fecha_hasta'] = $fecha_hasta;
+
+// Obtener gastos con JOINs para producto, categoría y cuenta (con filtro de fechas)
 $stmt = $pdo->prepare("
     SELECT 
         e.id,
@@ -22,15 +53,55 @@ $stmt = $pdo->prepare("
     INNER JOIN categories c ON p.category_id = c.id
     INNER JOIN accounts a ON e.account_id = a.id
     INNER JOIN currencies curr ON e.currency_id = curr.id
-    WHERE e.company_id = ?
+    WHERE $where
     ORDER BY e.date DESC, e.created_at DESC
 ");
-$stmt->execute([$company_id]);
-$expenses = $stmt->fetchAll();
+$stmt->execute($params);
+$expenses = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Contar total de gastos y total gastado
 $total_count = count($expenses);
 $total_amount = array_sum(array_column($expenses, 'amount'));
+
+
+// Exportar a Excel si se solicita
+
+// Función para quitar acentos
+function removeAccents($str)
+{
+    return iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $str);
+}
+
+// Exportar a CSV si se solicita
+if (isset($_GET['export']) && $_GET['export'] === 'excel') {
+    $filename = 'gastos_' . date('Y-m-d') . '.csv';
+
+    header('Content-Type: text/csv; charset=iso-8859-1');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+
+    $output = fopen('php://output', 'w');
+
+    // Escribir encabezado SIN ACENTOS y con ;
+    fputcsv($output, [
+        removeAccents('Fecha'),
+        removeAccents('Categoria'),
+        removeAccents('Producto'),
+        removeAccents('Descripcion'),
+        removeAccents('Monto')
+    ], ';');
+
+    foreach ($expenses as $e) {
+        fputcsv($output, [
+            $e['date'],
+            removeAccents($e['category_name']),
+            removeAccents($e['product_name']),
+            removeAccents($e['description'] ?? ''),
+            number_format((float)$e['amount'], 2, ',', '') // Formato 1.234,56
+        ], ';');
+    }
+    fclose($output);
+    exit;
+}
 
 include '../includes/header.php';
 ?>
@@ -67,6 +138,35 @@ include '../includes/header.php';
         <a href="add.php" class="btn-blue text-white px-4 py-2 rounded-md text-sm font-medium mt-4 md:mt-0">
             + Agregar Gasto
         </a>
+    </div>
+
+    <!-- Filtro de fechas -->
+    <div class="bg-white p-4 rounded-lg shadow mb-6">
+        <form method="GET" class="flex flex-col sm:flex-row gap-3 items-end">
+            <div>
+                <label for="fecha_desde" class="block text-sm font-medium text-gray-700">Desde</label>
+                <input type="date" id="fecha_desde" name="fecha_desde"
+                       value="<?= htmlspecialchars($_GET['fecha_desde'] ?? date('Y-m-01')) ?>"
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div>
+                <label for="fecha_hasta" class="block text-sm font-medium text-gray-700">Hasta</label>
+                <input type="date" id="fecha_hasta" name="fecha_hasta"
+                       value="<?= htmlspecialchars($_GET['fecha_hasta'] ?? date('Y-m-d')) ?>"
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 h-[42px]">
+                    Filtrar
+                </button>
+            </div>
+            <div>
+                <a href="?<?= http_build_query(array_merge($_GET, ['export' => 'excel'])) ?>"
+                   class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 h-[42px] inline-flex items-center">
+                    Exportar a Excel
+                </a>
+            </div>
+        </form>
     </div>
 
     <!-- Tabla de gastos -->
