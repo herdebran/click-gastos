@@ -44,6 +44,7 @@ $stmt = $pdo->prepare("
         e.date,
         e.amount,
         e.note,
+        e.paid,
         p.name AS product_name,
         c.name AS category_name,
         a.name AS account_name,
@@ -189,6 +190,7 @@ include '../includes/header.php';
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cuenta</th>
                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Importe</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                     </tr>
                     </thead>
@@ -204,9 +206,33 @@ include '../includes/header.php';
                                 <span class="badge-purple px-2 py-1 rounded text-xs"><?php echo htmlspecialchars($e['account_name']); ?></span>
                             </td>
                             <td class="px-6 py-4 text-sm font-medium text-right text-gray-900"><?php echo htmlspecialchars($e['symbol']); ?><?php echo number_format($e['amount'], 2, ',', '.'); ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <?php if ($e['paid']): ?>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                        </svg>
+                                        Pagado
+                                    </span>
+                                <?php else: ?>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                        <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 102 0V6zm-1 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"></path>
+                                        </svg>
+                                        Pendiente
+                                    </span>
+                                <?php endif; ?>
+                            </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <?php if (!$e['paid']): ?>
+                                    <button type="button"
+                                            @click="openMarkPaidModal(<?php echo (int)$e['id']; ?>, '<?php echo htmlspecialchars($e['account_name']); ?>')"
+                                            class="text-blue-600 hover:text-blue-800 mr-3">
+                                        Marcar como pagado
+                                    </button>
+                                <?php endif; ?>
                                 <button type="button"
-                                        @click="openDeleteModal(<?php echo (int)$e['id']; ?>, '<?php echo htmlspecialchars($e['account_name']); ?>', <?php echo $e['amount']; ?>)"
+                                        @click="openDeleteModal(<?php echo (int)$e['id']; ?>, '<?php echo htmlspecialchars($e['account_name']); ?>', <?php echo $e['amount']; ?>,<?php echo $e['paid'] ? 'true' : 'false'; ?>)"
                                         class="text-red-600 hover:text-red-900">
                                     Eliminar
                                 </button>
@@ -253,6 +279,11 @@ include '../includes/header.php';
                                     Devolver el importe a la cuenta
                                 </label>
                             </div>
+
+                            <!-- Mensaje para movimientos pendientes -->
+                            <div class="mt-4 text-sm text-gray-500" x-show="!isPaidExpense">
+                                Este movimiento está pendiente, por lo tanto no afecta el saldo de la cuenta.
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -270,26 +301,77 @@ include '../includes/header.php';
         </div>
     </div>
 
+    <!-- Modal de confirmación: Marcar como pagado -->
+    <div x-show="markPaidModalOpen" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="markPaidModalOpen" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div x-show="markPaidModalOpen" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                <div class="sm:flex sm:items-start">
+                    <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                        <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900">Confirmar pago</h3>
+                        <div class="mt-2">
+                            <p class="text-sm text-gray-500">
+                                ¿Está seguro de marcar el movimiento como pagado?<br>
+                                Esto moverá el saldo de la cuenta <strong x-text="markPaidAccountName"></strong>.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                    <form :action="'mark_as_paid.php?id=' + markPaidExpenseId" method="POST" class="inline">
+                        <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto sm:text-sm">
+                            Confirmar
+                        </button>
+                    </form>
+                    <button type="button" @click="markPaidModalOpen = false" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('alpine:init', () => {
             Alpine.data('expensesList', () => ({
+                // Modal eliminar
                 deleteModalOpen: false,
                 deleteExpenseId: null,
                 deleteAccountName: '',
                 deleteAmount: 0,
                 restoreBalance: true,
+                isPaidExpense: true,
 
-                openDeleteModal(id, accountName, amount) {
+                // Modal marcar como pagado
+                markPaidModalOpen: false,
+                markPaidExpenseId: null,
+                markPaidAccountName: '',
+
+                openDeleteModal(id, accountName, amount, isPaid = true) {
                     this.deleteExpenseId = id;
                     this.deleteAccountName = accountName;
                     this.deleteAmount = parseFloat(amount).toFixed(2);
-                    this.restoreBalance = true; // por defecto marcado
+                    this.isPaidExpense = isPaid;
+                    this.restoreBalance = true;
                     this.deleteModalOpen = true;
+                },
+
+                openMarkPaidModal(id, accountName) {
+                    this.markPaidExpenseId = id;
+                    this.markPaidAccountName = accountName;
+                    this.markPaidModalOpen = true;
                 }
             }));
         });
     </script>
-
 </main>
 
 <?php include '../includes/footer.php';?>

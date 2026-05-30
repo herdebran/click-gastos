@@ -16,6 +16,8 @@ $amount = $_POST['amount'] ?? '';
 $account_id = $_POST['account_id'] ?? '';
 $note = trim($_POST['note'] ?? '');
 $currency_id = $_POST['currency_id'] ?? 1;
+$paid = isset($_POST['paid']) ? 1 : 0; //Checked de pagado
+$paid_at = $paid ? $_POST['date'] : null; // Si está pagado, usar la fecha del movimiento
 
 // Validar campos obligatorios
 if (!$date || !$product_id || !$amount || !$account_id) {
@@ -70,16 +72,18 @@ try {
 
     // 1. Insertar el gasto
     $stmt = $pdo->prepare("
-        INSERT INTO expenses (date, product_id, amount,currency_id, account_id, company_id, note)
-        VALUES (?, ?, ?, ?, ?, ?,?)
+        INSERT INTO expenses (date, product_id, amount,currency_id, account_id, company_id, note, paid, paid_at)
+        VALUES (?, ?, ?, ?, ?, ?,?,?,?)
     ");
-    $stmt->execute([$date, (int)$product_id, $amount,(int)$currency_id, (int)$account_id, $company_id, $note]);
+    $stmt->execute([$date, (int)$product_id, $amount,(int)$currency_id, (int)$account_id, $company_id, $note,$paid,$paid_at]);
 
-    // 2. Actualizar el saldo de la cuenta: restar el importe
-    $new_balance = (float)$account['balance'] - $amount;
+    // 2. Actualizar el saldo de la cuenta: restar el importe (solo si es paid)
+    if ($paid) {
+        $new_balance = (float)$account['balance'] - $amount;
 
-    $stmt = $pdo->prepare("UPDATE accounts SET balance = ? WHERE id = ?");
-    $stmt->execute([$new_balance, (int)$account_id]);
+        $stmt = $pdo->prepare("UPDATE accounts SET balance = ? WHERE id = ?");
+        $stmt->execute([$new_balance, (int)$account_id]);
+    }
 
     // Confirmar cambios
     $pdo->commit();

@@ -21,7 +21,7 @@ if (!$expense_id || !is_numeric($expense_id)) {
 
 // Obtener datos del gasto (y validar que pertenezca a la empresa)
 $stmt = $pdo->prepare("
-    SELECT e.amount, e.account_id, a.balance
+    SELECT e.amount, e.account_id, a.balance, e.paid
     FROM expenses e
     INNER JOIN accounts a ON e.account_id = a.id
     WHERE e.id = ? AND e.company_id = ?
@@ -38,8 +38,8 @@ if (!$expense) {
 try {
     $pdo->beginTransaction();
 
-    // Opción 1: Revertir saldo
-    if ($restore) {
+    // Opción 1: Revertir saldo (Solo si es un movimiento PAGO)
+    if ($restore && $expense['paid']) {
         $new_balance = (float)$expense['balance'] + (float)$expense['amount'];
         $stmt = $pdo->prepare("UPDATE accounts SET balance = ? WHERE id = ?");
         $stmt->execute([$new_balance, (int)$expense['account_id']]);

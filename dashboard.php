@@ -25,10 +25,16 @@ $income_month = (float)$stmt->fetchColumn();
 $stmt = $pdo->prepare("
     SELECT COALESCE(SUM(amount), 0) 
     FROM expenses 
-    WHERE company_id = ? AND MONTH(date) = ? AND YEAR(date) = ?
-    AND is_transfer=0
+    WHERE company_id = ? 
+      AND paid = 1
+      AND (
+        (paid_at IS NOT NULL AND MONTH(paid_at) = ? AND YEAR(paid_at) = ?)
+        OR
+        (paid_at IS NULL AND MONTH(date) = ? AND YEAR(date) = ?)
+      )
+      AND is_transfer = 0
 ");
-$stmt->execute([$company_id, $month, $year]);
+$stmt->execute([$company_id, $month, $year, $month, $year]);
 $expense_month = (float)$stmt->fetchColumn();
 
 // 3. Saldo del mes = ingresos - gastos
@@ -44,15 +50,19 @@ $stmt = $pdo->prepare("
     INNER JOIN categories c ON p.category_id = c.id
     WHERE 
         e.company_id = ? 
-        AND MONTH(e.date) = ? 
-        AND YEAR(e.date) = ?
-        AND c.type = 'expense'
-        AND e.is_transfer = 0    
+        AND e.paid = 1
+        AND (
+          (e.paid_at IS NOT NULL AND MONTH(e.paid_at) = ? AND YEAR(e.paid_at) = ?)
+          OR
+          (e.paid_at IS NULL AND MONTH(e.date) = ? AND YEAR(e.date) = ?)
+        )
+        AND c.type != 'transferencia'
+        AND e.is_transfer = 0
     GROUP BY c.id, c.name
     ORDER BY total DESC
     LIMIT 5
 ");
-$stmt->execute([$company_id, $month, $year]);
+$stmt->execute([$company_id, $month, $year, $month, $year]);
 $top_categories = $stmt->fetchAll();
 
 // CONVERTIR LOS MONTOS A FLOAT

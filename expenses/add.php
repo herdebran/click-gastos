@@ -81,7 +81,6 @@ $accounts = $stmt->fetchAll();
                            value="<?php echo date('Y-m-d'); ?>"
                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                 </div>
-
                 <!-- Producto con botón "+" -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Producto o Servicio</label>
@@ -142,7 +141,19 @@ $accounts = $stmt->fetchAll();
                         <?php endforeach; ?>
                     </select>
                 </div>
-
+                <!-- Check Pagado -->
+                <div class="mb-4">
+                    <div class="flex items-center">
+                        <input type="checkbox" id="paid" name="paid" value="1" checked
+                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                        <label for="paid" class="ml-2 block text-sm text-gray-700">
+                            Pagado
+                        </label>
+                    </div>
+                    <p class="mt-1 text-sm text-gray-500">
+                        Desmarque esta opción si el pago es diferido
+                    </p>
+                </div>
                 <!-- Observación -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Observación (opcional)</label>
